@@ -1,0 +1,545 @@
+unknown terrain
+no near (10 m) roads
+-
+no near (10 m) barriers
+-
+POINT INSIDE BARRIER: ['university']
+POINT INSIDE BARRIER: ['building']
+no near (10 m) obstacles
+
+unknown terrain
+nearest road   : ['service', 'sett'] at 0.76 m
+road crossing ahead
+no near (10 m) barriers
+-
+POINT INSIDE BARRIER: ['university']
+no near (10 m) obstacles
+
+unknown terrain
+nearest road   : ['footway', 'paving_stones'] at 0.4 m
+-
+no near (10 m) barriers
+-
+POINT INSIDE BARRIER: ['university']
+no near (10 m) obstacles
+
+unknown terrain
+nearest road   : ['footway', 'paving_stones'] at 1.05 m
+-
+no near (10 m) barriers
+-
+POINT INSIDE BARRIER: ['university']
+no near (10 m) obstacles
+
+unknown terrain
+nearest road   : ['service', 'sett'] at 1.69 m
+road crossing ahead
+no near (10 m) barriers
+-
+POINT INSIDE BARRIER: ['university']
+no near (10 m) obstacles
+
+unknown terrain
+nearest road   : ['footway', 'paving_stones'] at 0.2 m
+-
+no near (10 m) barriers
+-
+POINT INSIDE BARRIER: ['university']
+no near (10 m) obstacles
+
+unknown terrain
+nearest road   : ['path', 'sett'] at 0.25 m
+road crossing ahead
+no near (10 m) barriers
+-
+POINT INSIDE BARRIER: ['university']
+no near (10 m) obstacles
+
+unknown terrain
+nearest road   : ['footway', 'paving_stones'] at 0.14 m
+-
+no near (10 m) barriers
+-
+POINT INSIDE BARRIER: ['university']
+no near (10 m) obstacles
+
+unknown terrain
+nearest road   : ['footway', 'paving_stones'] at 2.56 m
+-
+no near (10 m) barriers
+-
+POINT INSIDE BARRIER: ['building']
+POINT INSIDE BARRIER: ['university']
+no near (10 m) obstacles
+
+unknown terrain
+no near (10 m) roads
+-
+no near (10 m) barriers
+-
+POINT INSIDE BARRIER: ['building']
+POINT INSIDE BARRIER: ['university']
+no near (10 m) obstacles
+
+unknown terrain
+no near (10 m) roads
+-
+no near (10 m) barriers
+-
+POINT INSIDE BARRIER: ['university']
+no near (10 m) obstacles
+
+unknown terrain
+no near (10 m) roads
+-
+no near (10 m) barriers
+-
+POINT INSIDE BARRIER: ['building']
+POINT INSIDE BARRIER: ['university']
+no near (10 m) obstacles
+
+unknown terrain
+no near (10 m) roads
+-
+no near (10 m) barriers
+-
+POINT INSIDE BARRIER: ['building']
+POINT INSIDE BARRIER: ['university']
+no near (10 m) obstacles
+
+unknown terrain
+nearest road   : ['footway', 'asphalt'] at 3.1 m
+-
+no near (10 m) barriers
+-
+POINT INSIDE BARRIER: ['building']
+POINT INSIDE BARRIER: ['university']
+no near (10 m) obstacles
+
+unknown terrain
+nearest road   : ['footway'] at 3.34 m
+-
+no near (10 m) barriers
+-
+POINT INSIDE BARRIER: ['building']
+POINT INSIDE BARRIER: ['university']
+no near (10 m) obstacles
+
+unknown terrain
+nearest road   : ['primary', 'asphalt'] at 3.57 m
+-
+no near (10 m) barriers
+-
+POINT INSIDE BARRIER: ['building']
+POINT INSIDE BARRIER: ['university']
+no near (10 m) obstacles
+
+unknown terrain
+nearest road   : ['footway', 'sett'] at 3.62 m
+road crossing ahead
+no near (10 m) barriers
+-
+POINT INSIDE BARRIER: ['building']
+POINT INSIDE BARRIER: ['university']
+no near (10 m) obstacles
+
+unknown terrain
+nearest road   : ['footway', 'asphalt'] at 0.43 m
+-
+nearest barrier: ['building'] at 3.91 m
+-
+point is outside
+no near (10 m) obstacles
+
+[['railway']]
+nearest road   : ['footway', 'asphalt'] at 0.45 m
+-
+nearest barrier: ['building'] at 8.51 m
+-
+point is outside
+no near (10 m) obstacles
+
+unknown terrain
+nearest road   : ['footway', 'paving_stones'] at 0.08 m
+road crossing ahead
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+unknown terrain
+nearest road   : ['footway', 'asphalt'] at 0.34 m
+-
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+unknown terrain
+nearest road   : ['footway', 'asphalt'] at 0.76 m
+-
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+unknown terrain
+nearest road   : ['steps'] at 1.19 m
+-
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+[['park']]
+nearest road   : ['footway', 'paving_stones'] at 1.61 m
+-
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+unknown terrain
+nearest road   : ['footway', 'paving_stones'] at 0.12 m
+road crossing ahead
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+[['park']]
+nearest road   : ['footway', 'paving_stones'] at 0.96 m
+-
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+[['park']]
+nearest road   : ['footway', 'asphalt'] at 2.01 m
+road crossing ahead
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+[['park']]
+nearest road   : ['footway'] at 0.52 m
+road crossing ahead
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+[['park']]
+nearest road   : ['footway', 'asphalt'] at 1.8 m
+road crossing ahead
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+[['park']]
+nearest road   : ['footway', 'asphalt'] at 1.76 m
+road crossing ahead
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+[['park']]
+nearest road   : ['footway', 'asphalt'] at 0.3 m
+-
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+[['park']]
+nearest road   : ['footway', 'asphalt'] at 1.31 m
+road crossing ahead
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+[['park']]
+nearest road   : ['footway', 'asphalt'] at 1.69 m
+road crossing ahead
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+[['park']]
+nearest road   : ['footway', 'asphalt'] at 1.69 m
+-
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+[['park']]
+nearest road   : ['footway', 'asphalt'] at 2.52 m
+-
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+[['park']]
+nearest road   : ['footway', 'asphalt'] at 0.63 m
+road crossing ahead
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+[['park']]
+nearest road   : ['footway', 'asphalt'] at 1.08 m
+road crossing ahead
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+[['park']]
+nearest road   : ['footway', 'asphalt'] at 0.27 m
+road crossing ahead
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+[['park']]
+nearest road   : ['footway', 'asphalt'] at 2.32 m
+-
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+[['park']]
+nearest road   : ['tertiary', 'asphalt'] at 2.43 m
+-
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+[['park']]
+nearest road   : ['footway', 'asphalt'] at 1.12 m
+-
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+[['park']]
+nearest road   : ['footway', 'asphalt'] at 1.76 m
+road crossing ahead
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+[['park']]
+nearest road   : ['cycleway', 'asphalt'] at 0.35 m
+-
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+unknown terrain
+nearest road   : ['cycleway', 'asphalt'] at 0.18 m
+-
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+unknown terrain
+nearest road   : ['footway', 'asphalt'] at 0.63 m
+road crossing ahead
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+unknown terrain
+nearest road   : ['footway'] at 0.91 m
+road crossing ahead
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+unknown terrain
+nearest road   : ['primary', 'asphalt'] at 0.57 m
+-
+nearest barrier: ['building'] at 9.37 m
+-
+point is outside
+no near (10 m) obstacles
+
+unknown terrain
+nearest road   : ['primary', 'asphalt'] at 0.02 m
+-
+nearest barrier: ['building'] at 9.8 m
+-
+point is outside
+no near (10 m) obstacles
+
+unknown terrain
+nearest road   : ['residential', 'asphalt'] at 0.82 m
+-
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+unknown terrain
+nearest road   : ['footway'] at 1.39 m
+-
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+unknown terrain
+nearest road   : ['footway'] at 1.96 m
+road crossing ahead
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+unknown terrain
+nearest road   : ['footway', 'sett'] at 0.19 m
+road crossing ahead
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+unknown terrain
+nearest road   : ['footway', 'sett'] at 0.16 m
+-
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+[['residential']]
+nearest road   : ['footway'] at 0.42 m
+road crossing ahead
+nearest barrier: ['building'] at 8.83 m
+-
+point is outside
+no near (10 m) obstacles
+
+[['residential']]
+nearest road   : ['footway'] at 0.29 m
+-
+nearest barrier: ['building'] at 7.88 m
+-
+point is outside
+no near (10 m) obstacles
+
+[['residential']]
+nearest road   : ['residential', 'asphalt'] at 1.68 m
+road crossing ahead
+nearest barrier: ['building'] at 7.75 m
+-
+point is outside
+no near (10 m) obstacles
+
+[['residential']]
+nearest road   : ['residential', 'asphalt'] at 0.09 m
+-
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+[['residential']]
+nearest road   : ['footway', 'paving_stones'] at 0.19 m
+road crossing ahead
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+[['residential']]
+nearest road   : ['footway'] at 0.25 m
+-
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+[['residential']]
+nearest road   : ['footway'] at 0.7 m
+-
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+[['residential']]
+nearest road   : ['footway'] at 1.14 m
+-
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+[['residential']]
+nearest road   : ['footway'] at 1.59 m
+-
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+[['residential']]
+nearest road   : ['footway'] at 2.04 m
+-
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+[['residential']]
+nearest road   : ['footway'] at 2.16 m
+-
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+[['residential']]
+no near (10 m) roads
+-
+no near (10 m) barriers
+-
+POINT INSIDE BARRIER: ['building']
+no near (10 m) obstacles
+
+[['residential']]
+no near (10 m) roads
+-
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
+[['residential']]
+no near (10 m) roads
+-
+no near (10 m) barriers
+-
+point is outside
+no near (10 m) obstacles
+
