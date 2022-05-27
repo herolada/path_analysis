@@ -15,6 +15,7 @@ from xml.etree import ElementTree
 import numpy as np
 import geopy.distance
 from random import random
+import time
 from copy import deepcopy
 from coords_to_waypoints import coords_to_waypoints
 #from skspatial.objects import Line
@@ -24,15 +25,19 @@ from coords_to_waypoints import coords_to_waypoints
 # %%
 
 OSM_URL = "https://www.openstreetmap.org/api/0.6/way/{}/relations"
-TERRAIN_TAGS = ['landuse','leisure','natural','public_transport','service']
-BARRIER_TAGS = ['waterway','barrier','man_made','building','amenity']
+TERRAIN_TAGS = ['landuse','natural','public_transport','service']
+TERRAIN_VALUES = ['park']
+TERRAIN_OR_BARRIER_TAGS = ['leisure']
+BARRIER_TAGS = ['waterway','barrier','man_made','building','amenity','sport']
 NOT_BARRIER_AREA_VALUES = ['parking']
-ROAD_TAGS = ['highway','surface']
+ROAD_TAGS = ['highway','footway','surface']
+FOOTWAY_VALUES = ['footway', 'steps', 'cycleway', 'path']
 TAGS_KEY_ONLY = ['building']
-OBSTACLE_TAGS = ['historic','amenity','natural','tourism']
+OBSTACLE_TAGS = ['historic','amenity','natural','tourism','information']
 NOT_OBSTACLE_TAGS = ['addr:country','addr:street']
 
 MAX_ROAD_DIST = 10
+MAX_FOOTWAY_DIST = 5
 MAX_BARRIER_DIST = 10
 MAX_OBSTACLE_DIST = 10
 
@@ -41,15 +46,21 @@ class PointInformation():
         self.terrain = []
         self.inside_barrier = []
         self.roads = []
+        self.footways = []
         self.barriers = []
         self.obstacles = []
         self.is_crossing_road = False
         self.is_crossing_barrier = False
+        self.wgs = [0,0]
     
     def repr_dict(self):
         d = {}
+        d['wgs'] = self.wgs
         d['terrain'] = [None,', '.join(list(itertools.chain(*self.terrain)))] if self.terrain else []
+        area_tags = [self.inside_barrier[i].tag_selection(BARRIER_TAGS+TERRAIN_OR_BARRIER_TAGS) for i in range(len(self.inside_barrier))]
+        d['area'] = [None,', '.join(list(itertools.chain(*area_tags)))] if self.inside_barrier else []
         d['road'] = [self.roads[0][1],', '.join(self.roads[0][0].tag_selection(ROAD_TAGS))] if self.roads else []
+        d['footway'] = [self.footways[0][1],', '.join(self.footways[0][0].tag_selection(ROAD_TAGS))] if self.footways else []
         d['barrier'] = [self.barriers[0][1],', '.join(self.barriers[0][0].tag_selection(BARRIER_TAGS))] if self.barriers else []
         d['obstacle'] = [self.obstacles[0][1],', '.join(self.obstacles[0][0].tag_selection())] if self.obstacles else []
         return d
@@ -107,11 +118,15 @@ class Way():
         self.in_out = ""
     
     def is_road(self):
-        if any(tag in ROAD_TAGS for tag in self.tags):
+        if self.tags.get('highway', None) and not self.tags.get('highway', None) in FOOTWAY_VALUES:
+            return True
+
+    def is_footway(self):
+        if self.tags.get('highway', None) and self.tags.get('highway', None) in FOOTWAY_VALUES:
             return True
         
     def is_terrain(self):
-        if any(tag in TERRAIN_TAGS for tag in self.tags):
+        if any(tag in TERRAIN_TAGS+TERRAIN_OR_BARRIER_TAGS for tag in self.tags) and not any(tag in BARRIER_TAGS for tag in self.tags):
             return True
     
     def is_barrier(self):
@@ -143,7 +158,7 @@ class Obstacle():
         tags_list = list(self.tags.items())
 
         for i in range(len(self.tags.items())):
-            if (tags_list[i][0] in OBSTACLE_TAGS or tags_list[i][1] in OBSTACLE_TAGS) and not tags_list[i][0] in NOT_OBSTACLE_TAGS:
+            if (tags_list[i][0] in OBSTACLE_TAGS or tags_list[i][1] in OBSTACLE_TAGS) and not (tags_list[i][0] in NOT_OBSTACLE_TAGS):
                 if tags_list[i][0] in TAGS_KEY_ONLY:
                     selected.append(tags_list[i][0])
                 else:
@@ -158,6 +173,7 @@ class PathAnalysis:
     def __init__(self, in_file):
         self.api = overpy.Overpass()
         self.waypoints = np.genfromtxt(in_file, delimiter=',')
+        self.waypoints_wgs = np.genfromtxt(in_file, delimiter=',')
         self.max_lat = np.max(self.waypoints[:,0])
         self.min_lat = np.min(self.waypoints[:,0])
         self.max_long = np.max(self.waypoints[:,1])
@@ -173,10 +189,12 @@ class PathAnalysis:
         self.way_node_ids = set() # nodes to be counted as obstacles
         self.terrain_areas = set()
         self.roads = set()
+        self.footways = set()
         self.barriers = set()
         self.barrier_areas = set()
         self.terrain_areas_list = set()
         self.roads_list = set()
+        self.footways_list = set()
         self.barriers_list = set()
         self.barrier_areas_list = set()
         self.ways = dict()
@@ -321,7 +339,7 @@ class PathAnalysis:
 
         for node in self.osm_nodes_data.nodes:
             if not node.id in self.way_node_ids:
-                if any(np.logical_and([tag in OBSTACLE_TAGS for tag in node.tags],[tag not in NOT_OBSTACLE_TAGS for tag in node.tags])):
+                if any([tag in OBSTACLE_TAGS for tag in node.tags]) and not any([tag in NOT_OBSTACLE_TAGS for tag in node.tags]):
                     obstacle = Obstacle()
                     obstacle.id = node.id
                     obstacle.tags = node.tags
@@ -340,6 +358,9 @@ class PathAnalysis:
         for way in self.ways.values():
             if way.is_road():
                 self.roads.add(way)
+            
+            elif way.is_footway():
+                self.footways.add(way)
 
             elif way.is_area:
                 if way.is_barrier():
@@ -355,6 +376,7 @@ class PathAnalysis:
                 with open("unclassified_tags.txt",'a+') as f:
                         f.write(str(way.tags)+"\n")
         self.roads_list = list(self.roads)
+        self.footways_list = list(self.footways)
         self.barrier_areas_list = list(self.barrier_areas)
         self.terrain_areas_list = list(self.terrain_areas)
         self.barriers_list = list(self.barriers)
@@ -380,13 +402,13 @@ class PathAnalysis:
             return(way, round(min_distance,2), n_close_ways)
 
     def closest_way_and_is_crossing(self, ways_list, current_point, next_point):
-        way,dist,n_ways = self.closest_way(ways_list,current_point,4)
+        close_way,dist,n_ways = self.closest_way(ways_list,current_point,4)
         is_crossing = False
         for way in n_ways:
             is_crossing = self.is_crossing_way(way,current_point,next_point)
             if is_crossing:
                 break
-        return way,dist,is_crossing
+        return close_way,dist,is_crossing
         
         
     def closest_obstacle(self, obstacles, point):
@@ -396,24 +418,30 @@ class PathAnalysis:
         obstacle = obstacles[arg_min_distance]    
         return(obstacle, round(min_distance,2))
     
-    def analyze_point(self, point, next_point):
+    def analyze_point(self, point, next_point, i):
         """ Get terrain under point.
             Get nearest road.
             Get nearest barrier.
             Find out if the point is inside a barrier (e.g. inside a building or a fence). """
 
         point_information = PointInformation()
-        
+        point_information.wgs = self.waypoints_wgs[i]
+
         """ Analyze terrain. """
         for way in self.terrain_areas_list:
             if way.line.contains(point):
-                point_information.terrain.append(way.tag_selection(TERRAIN_TAGS))
+                point_information.terrain.append(way.tag_selection(TERRAIN_TAGS+TERRAIN_OR_BARRIER_TAGS))
         
         """ Find (if any) the nearest road. """
         way,dist,is_crossing = self.closest_way_and_is_crossing(self.roads_list, point, next_point)
         if dist <= MAX_ROAD_DIST:
             point_information.roads.append([way,dist])
             point_information.is_crossing_road = is_crossing
+        
+        """ Find (if any) the nearest footway. """
+        way,dist,_ = self.closest_way(self.footways_list, point)
+        if dist <= MAX_FOOTWAY_DIST:
+            point_information.footways.append([way,dist])
 
         """ Find (if any) the nearest barrier. """
         way,dist,is_crossing = self.closest_way_and_is_crossing(self.barriers_list, point, next_point)
@@ -434,16 +462,17 @@ class PathAnalysis:
         return point_information
     
     def analyze_all_points(self):
+        t = time.time()
         self.points_information = [PointInformation() for point in self.points]
         for i,point in enumerate(self.points):
             if i < len(self.points)-1:
-                point_information = self.analyze_point(point, self.points[i+1])
+                point_information = self.analyze_point(point, self.points[i+1], i)
             else:
-                point_information = self.analyze_point(point, self.points[i])
+                point_information = self.analyze_point(point, self.points[i], i)
             self.points_information[i] = point_information
             self.points_information[i].x = point.x
             self.points_information[i].y = point.y
-
+        print(time.time() - t)
 
     def run(self):
         self.parse_ways()

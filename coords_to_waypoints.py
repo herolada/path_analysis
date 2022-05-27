@@ -2,8 +2,8 @@ import geopy.distance
 import numpy as np
 from math import floor, ceil
 
-def coords_to_waypoints(waypoints_density = 0.1, waypoints_file="waypoints.csv"):     # waypoints_density == dist between neighbor waypoints. in meters
-    coords = np.genfromtxt('coords.csv', delimiter=',')
+def coords_to_waypoints(waypoints_density = 0.1, coords_file="coords.csv", waypoints_file="waypoints.csv"):     # waypoints_density == dist between neighbor waypoints. in meters
+    coords = np.genfromtxt(coords_file, delimiter=',')
     waypoints = []
     
     for i in range(len(coords)-1):
