@@ -18,8 +18,8 @@ from random import random
 import time
 from copy import deepcopy
 from coords_to_waypoints import coords_to_waypoints
-#from skspatial.objects import Line
-#from skspatial.objects import Point
+from points_to_graph_points import points_to_graph_points
+from graph_tool.all import *
 
 
 # %%
@@ -42,72 +42,11 @@ MAX_BARRIER_DIST = 10
 MAX_OBSTACLE_DIST = 10
 
 class PointInformation():
-    def __init__(self):
-        self.terrain = []
-        self.inside_barrier = []
-        self.roads = []
-        self.footways = []
-        self.barriers = []
-        self.obstacles = []
-        self.is_crossing_road = False
-        self.is_crossing_barrier = False
-        self.wgs = [0,0]
+    def __init__(self,x=0,y=0):
+        self.x = x
+        self.y = y
+        self.altitude = 0
     
-    def repr_dict(self):
-        d = {}
-        d['wgs'] = self.wgs
-        d['terrain'] = [None,', '.join(list(itertools.chain(*self.terrain)))] if self.terrain else []
-        area_tags = [self.inside_barrier[i].tag_selection(BARRIER_TAGS+TERRAIN_OR_BARRIER_TAGS) for i in range(len(self.inside_barrier))]
-        d['area'] = [None,', '.join(list(itertools.chain(*area_tags)))] if self.inside_barrier else []
-        d['road'] = [self.roads[0][1],', '.join(self.roads[0][0].tag_selection(ROAD_TAGS))] if self.roads else []
-        d['footway'] = [self.footways[0][1],', '.join(self.footways[0][0].tag_selection(ROAD_TAGS))] if self.footways else []
-        d['barrier'] = [self.barriers[0][1],', '.join(self.barriers[0][0].tag_selection(BARRIER_TAGS))] if self.barriers else []
-        d['obstacle'] = [self.obstacles[0][1],', '.join(self.obstacles[0][0].tag_selection())] if self.obstacles else []
-        return d
-
-    def __str__(self):
-        s = ""
-        if self.terrain:
-            s += "{}\n".format(repr(self.terrain))
-        else:
-            s += "unknown terrain\n"
-
-        if self.roads:
-            for r in self.roads:
-                s += "nearest road   : {} at {} m\n".format(r[0].tag_selection(ROAD_TAGS), r[1])
-        else:
-            s += "no near (10 m) roads\n"
-        
-        if self.is_crossing_road:
-            s += "road crossing ahead\n"
-        else:
-            s += "-\n"
-
-        if self.barriers:
-            for b in self.barriers:
-                s += "nearest barrier: {} at {} m\n".format(b[0].tag_selection(BARRIER_TAGS), b[1])
-        else:
-            s += "no near (10 m) barriers\n"
-        
-        if self.is_crossing_barrier:
-            s += "barrier crossing ahead\n"
-        else:
-            s += "-\n"
-
-        if self.inside_barrier:
-            for i in self.inside_barrier:
-                s += "POINT INSIDE BARRIER: {}\n".format(i.tag_selection(BARRIER_TAGS))
-        else:
-            s += "point is outside\n"
-        
-        if self.obstacles:
-            for h in self.obstacles:
-                s += "nearest obstacle   : {} at {} m\n".format(h[0], h[1])
-        else:
-            s += "no near (10 m) obstacles\n"
-
-        return s
-        
 class Way():
     def __init__(self):
         self.id = -1
@@ -418,61 +357,140 @@ class PathAnalysis:
         obstacle = obstacles[arg_min_distance]    
         return(obstacle, round(min_distance,2))
     
-    def analyze_point(self, point, next_point, i):
+    def analyze_point(self, point, objects):
         """ Get terrain under point.
             Get nearest road.
             Get nearest barrier.
             Find out if the point is inside a barrier (e.g. inside a building or a fence). """
 
-        point_information = PointInformation()
-        point_information.wgs = self.waypoints_wgs[i]
+        point_information = PointInformation(point.x,point.y)
 
         """ Analyze terrain. """
-        for way in self.terrain_areas_list:
+        """ for way in objects['terrain_areas']:
             if way.line.contains(point):
-                point_information.terrain.append(way.tag_selection(TERRAIN_TAGS+TERRAIN_OR_BARRIER_TAGS))
+                point_information.terrain.append(way.tag_selection(TERRAIN_TAGS+TERRAIN_OR_BARRIER_TAGS)) """
         
         """ Find (if any) the nearest road. """
-        way,dist,is_crossing = self.closest_way_and_is_crossing(self.roads_list, point, next_point)
+        """ way,dist,is_crossing = self.closest_way_and_is_crossing(objects['roads_list'], point, next_point)
         if dist <= MAX_ROAD_DIST:
             point_information.roads.append([way,dist])
-            point_information.is_crossing_road = is_crossing
+            point_information.is_crossing_road = is_crossing """
         
         """ Find (if any) the nearest footway. """
-        way,dist,_ = self.closest_way(self.footways_list, point)
+        """ way,dist,_ = self.closest_way(objects['footways'], point)
         if dist <= MAX_FOOTWAY_DIST:
-            point_information.footways.append([way,dist])
+            point_information.footways.append([way,dist]) """
 
         """ Find (if any) the nearest barrier. """
-        way,dist,is_crossing = self.closest_way_and_is_crossing(self.barriers_list, point, next_point)
+        """ way,dist,is_crossing = self.closest_way_and_is_crossing(objects['barriers'], point, next_point)
         if dist <= MAX_BARRIER_DIST:
             point_information.barriers.append([way,dist])
-            point_information.is_crossing_barrier = is_crossing
+            point_information.is_crossing_barrier = is_crossing """
         
-        """ Find if inside of a barrier area. """
-        for way in self.barrier_areas_list:
+        """ Find if inside of a barrier area.
+            If yes throw away the point. """
+
+        mask_me = False
+        for way in objects['barrier_areas']:
             if way.line.contains(point):
-                point_information.inside_barrier.append(way)
+                mask_me = True
+                break
         
         """ Find (if any) the nearest obstacle. """
-        obstacle,dist = self.closest_obstacle(self.obstacles,point)
+        """ obstacle,dist = self.closest_obstacle(objects['obstacles'],point)
         if dist <= MAX_OBSTACLE_DIST:
-            point_information.obstacles.append([obstacle,dist])
+            point_information.obstacles.append([obstacle,dist]) """
         
-        return point_information
+        return point_information,mask_me
+    
+    def reduce_object(self,objects,d,key,min_x,max_x,min_y,max_y):
+        for o in objects:
+
+            if key != 'obstacles':
+                bounds = o.line.bounds
+            else:
+                bounds = o.point.bounds
+
+            if bounds[0] < max_x and bounds[2] > min_x and bounds[1] < max_y and bounds[3] > min_y:
+                d[key].append(o)
+
+        return d
+
+    def get_reduced_objects(self,min_x,max_x,min_y,max_y):
+        reduced_objects = {'terrain_areas':[],
+                            'roads':[],
+                            'footways':[],
+                            'barriers':[],
+                            'barrier_areas':[],
+                            'obstacles':[]}
+
+        #reduced_objects = self.reduce_object(self.terrain_areas_list,reduced_objects,'terrain_areas',min_x,max_x,min_y,max_y)
+        #reduced_objects = self.reduce_object(self.roads_list,reduced_objects,'roads',min_x,max_x,min_y,max_y)
+        #reduced_objects = self.reduce_object(self.footways_list,reduced_objects,'footways',min_x,max_x,min_y,max_y)
+        #reduced_objects = self.reduce_object(self.barriers_list,reduced_objects,'barriers',min_x,max_x,min_y,max_y)
+        #reduced_objects = self.reduce_object(self.barrier_areas_list,reduced_objects,'barrier_areas',min_x,max_x,min_y,max_y)
+        #reduced_objects = self.reduce_object(self.obstacles,reduced_objects,'obstacles',min_x,max_x,min_y,max_y)
+        
+        for area in self.terrain_areas_list:
+            bounds = area.line.bounds
+            if bounds[0] < max_x and bounds[2] > min_x and bounds[1] < max_y and bounds[3] > min_y:
+                reduced_objects['terrain_areas'].append(area)
+        
+        for road in self.roads_list:
+            bounds = road.line.bounds
+            if bounds[0] < max_x and bounds[2] > min_x and bounds[1] < max_y and bounds[3] > min_y:
+                reduced_objects['roads'].append(road)
+
+        for footway in self.footways_list:
+            bounds = footway.line.bounds
+            if bounds[0] < max_x and bounds[2] > min_x and bounds[1] < max_y and bounds[3] > min_y:
+                reduced_objects['footways'].append(footway)
+        
+        for barrier in self.barriers_list:
+            bounds = barrier.line.bounds
+            if bounds[0] < max_x and bounds[2] > min_x and bounds[1] < max_y and bounds[3] > min_y:
+                reduced_objects['barriers'].append(barrier)
+        
+        for area in self.barrier_areas_list:
+            bounds = area.line.bounds
+            if bounds[0] < max_x and bounds[2] > min_x and bounds[1] < max_y and bounds[3] > min_y:
+                reduced_objects['barrier_areas'].append(area)
+        
+        for obstacle in self.obstacles:
+            bounds = obstacle.point.bounds
+            if bounds[0] < max_x and bounds[2] > min_x and bounds[1] < max_y and bounds[3] > min_y:
+                reduced_objects['obstacles'].append(obstacle)
+
+        return reduced_objects
     
     def analyze_all_points(self):
-        t = time.time()
-        self.points_information = [PointInformation() for point in self.points]
-        for i,point in enumerate(self.points):
+        self.graphs = [Graph(directed=False) for point in self.points]
+
+        for i in range(len(self.points)-1):
+            t = time.time()
+            current_point = self.points[i]
+            next_point = self.points[i+1]
+            graph = self.graphs[i]
+            graph_points = points_to_graph_points(current_point, next_point)
+            graph_points_information = [PointInformation()]*len(graph_points)
+            mask = [False] * len(graph_points_information)
+            """ Points to be analyzed are ready. Now get all the objects (roads,obstacles...) in the area. """
+            reduced_objects = self.get_reduced_objects(np.min(graph_points[:][0]),np.max(graph_points[:][0]),np.min(graph_points[:][1]),np.max(graph_points[:][1]))
+            for k,graph_point in enumerate(graph_points):
+                graph_points_information[k],mask[k]  = self.analyze_point(graph_point, reduced_objects)
+            print(len(graph_points))
+            print(sum(mask))
+            print(time.time() - t)
+
+        """ for i,point in enumerate(self.points):
             if i < len(self.points)-1:
                 point_information = self.analyze_point(point, self.points[i+1], i)
             else:
                 point_information = self.analyze_point(point, self.points[i], i)
             self.points_information[i] = point_information
             self.points_information[i].x = point.x
-            self.points_information[i].y = point.y
-        print(time.time() - t)
+            self.points_information[i].y = point.y """
+        
 
     def run(self):
         self.parse_ways()
