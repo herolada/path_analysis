@@ -19,7 +19,7 @@ import time
 from copy import deepcopy
 from coords_to_waypoints import coords_to_waypoints
 from points_to_graph_points import points_to_graph_points
-from graph_tool.all import *
+import graph_tool.all as gt
 
 
 # %%
@@ -48,13 +48,13 @@ class PointInformation():
         self.altitude = 0
     
 class Way():
-    def __init__(self):
-        self.id = -1
-        self.is_area = False
-        self.nodes = []
-        self.tags = None
-        self.line = None
-        self.in_out = ""
+    def __init__(self,id=-1,is_area=False,nodes=[],tags=None,line=None,in_out=""):
+        self.id = id
+        self.is_area = is_area
+        self.nodes = nodes
+        self.tags = tags
+        self.line = line
+        self.in_out = in_out
     
     def is_road(self):
         if self.tags.get('highway', None) and not self.tags.get('highway', None) in FOOTWAY_VALUES:
@@ -106,7 +106,26 @@ class Obstacle():
         return selected
 
 
-# %%
+class Visitor(gt.DijkstraVisitor):
+
+    def __init__(self, name, t):
+        self.name = name
+        self.t = t
+        self.last_time = 0
+
+    def discover_vertex(self, u):
+        print("-->", self.name[u], "has been discovered!")
+        self.t[u] = self.last_time
+        self.last_time += 1
+
+    def examine_edge(self, e):
+        print("edge (%s, %s) has been examined..." % \
+            (self.name[e.source()], self.name[e.target()]))
+
+    def edge_relaxed(self, e):
+        print("edge (%s, %s) has been relaxed..." % \
+            (self.name[e.source()], self.name[e.target()]))
+
 
 class PathAnalysis:
     def __init__(self, in_file):
@@ -285,8 +304,25 @@ class PathAnalysis:
                     coords = utm.fromLatLong(float(node.lat),float(node.lon))
                     obstacle.point = geometry.Point([coords.easting, coords.northing])
                     obstacles.append(obstacle)
+
+                    obstacle = self.point_to_area(obstacle)
+                    obstacle_way = Way(id=obstacle.id, is_area=True, tags=obstacle.tags, line=obstacle.line)
+                    self.barrier_areas.add(obstacle_way)
         
         self.obstacles = obstacles
+
+    def point_to_area(self, pointish):
+        area = pointish.point.buffer(2)
+        pointish.line = area
+        return pointish
+
+    def line_to_area(self, way):
+        """ The width of the buffer should depend on,
+            the type of way (river x fence, highway x path)... """
+        area = way.line.buffer(2)
+        way.line = area
+        return way
+
     
     def separate_ways(self):
         """ Separate self.ways (DICT) into LISTS:
@@ -310,15 +346,13 @@ class PathAnalysis:
             
             elif way.is_barrier():
                 self.barriers.add(way)
-            
+                way = self.line_to_area(way)
+                way.is_area = True
+                self.barrier_areas.add(way)
+
             else:
                 with open("unclassified_tags.txt",'a+') as f:
                         f.write(str(way.tags)+"\n")
-        self.roads_list = list(self.roads)
-        self.footways_list = list(self.footways)
-        self.barrier_areas_list = list(self.barrier_areas)
-        self.terrain_areas_list = list(self.terrain_areas)
-        self.barriers_list = list(self.barriers)
             
     def is_crossing_way(self,way,p1,p2):
         line = geometry.LineString([p1,p2])
@@ -356,6 +390,14 @@ class PathAnalysis:
         arg_min_distance = np.argmin(distances)
         obstacle = obstacles[arg_min_distance]    
         return(obstacle, round(min_distance,2))
+
+    def is_point_valid(self, point, objects):
+        valid = True
+        for way in objects['barrier_areas']:
+            if way.line.contains(point):
+                valid = False
+                break
+        return valid
     
     def analyze_point(self, point, objects):
         """ Get terrain under point.
@@ -390,18 +432,14 @@ class PathAnalysis:
         """ Find if inside of a barrier area.
             If yes throw away the point. """
 
-        mask_me = False
-        for way in objects['barrier_areas']:
-            if way.line.contains(point):
-                mask_me = True
-                break
+        hide_me = self.is_point_valid(point,objects)
         
         """ Find (if any) the nearest obstacle. """
         """ obstacle,dist = self.closest_obstacle(objects['obstacles'],point)
         if dist <= MAX_OBSTACLE_DIST:
             point_information.obstacles.append([obstacle,dist]) """
         
-        return point_information,mask_me
+        return point_information,hide_me
     
     def reduce_object(self,objects,d,key,min_x,max_x,min_y,max_y):
         for o in objects:
@@ -453,6 +491,7 @@ class PathAnalysis:
         
         for area in self.barrier_areas_list:
             bounds = area.line.bounds
+
             if bounds[0] < max_x and bounds[2] > min_x and bounds[1] < max_y and bounds[3] > min_y:
                 reduced_objects['barrier_areas'].append(area)
         
@@ -460,27 +499,137 @@ class PathAnalysis:
             bounds = obstacle.point.bounds
             if bounds[0] < max_x and bounds[2] > min_x and bounds[1] < max_y and bounds[3] > min_y:
                 reduced_objects['obstacles'].append(obstacle)
-
         return reduced_objects
     
     def analyze_all_points(self):
-        self.graphs = [Graph(directed=False) for point in self.points]
+        #self.graphs = [Graph(directed=False) for point in self.points]
+        THRESHOLD = 10
+
+        last_point = self.points[0]
 
         for i in range(len(self.points)-1):
             t = time.time()
-            current_point = self.points[i]
+            current_point = last_point
             next_point = self.points[i+1]
-            graph = self.graphs[i]
-            graph_points = points_to_graph_points(current_point, next_point)
+            next_point_index = -1
+
+            graph_points, points_line, _, _ = points_to_graph_points(current_point, next_point, density=1, width=THRESHOLD)
+            graph_points_arr = np.array([[p.x,p.y,i] for i,p in enumerate(graph_points)])
+            print("points to graph points 1: {}".format(round(time.time() - t,2)))
+            t = time.time()
+            """ Points to be analyzed are ready. Now get all the objects (roads,obstacles...) in the area. """
+            reduced_objects = self.get_reduced_objects(np.min(graph_points_arr[:,0]),np.max(graph_points_arr[:,0]),np.min(graph_points_arr[:,1]),np.max(graph_points_arr[:,1]))
+            print("get reduced objects: {}".format(round(time.time() - t,2)))
+            t = time.time()
+            start_and_finish_valid = False
+            k = 2
+            while not start_and_finish_valid:
+                start_valid = self.is_point_valid(current_point,reduced_objects)
+                goal_valid = self.is_point_valid(next_point,reduced_objects)
+                if start_valid and goal_valid:
+                    start_and_finish_valid = True
+                elif start_valid:
+                    next_point_index -= 1
+                    next_point = points_line[next_point_index]
+                    if next_point == current_point or next_point == self.points[i+k-1]:
+                        next_point = self.points[i+k]
+                        k += 1
+                else:
+                    print("something is WRONG :(")
+                #elif goal_valid:
+                #else:
+            print("check valid goal: {}".format(round(time.time() - t,2)))
+            t = time.time()
+            graph_points, points_line, start_index, goal_index = points_to_graph_points(current_point, next_point, density=1, width=10)
+            graph_points_arr = np.array([[p.x,p.y,i] for i,p in enumerate(graph_points)])
             graph_points_information = [PointInformation()]*len(graph_points)
             mask = [False] * len(graph_points_information)
-            """ Points to be analyzed are ready. Now get all the objects (roads,obstacles...) in the area. """
-            reduced_objects = self.get_reduced_objects(np.min(graph_points[:][0]),np.max(graph_points[:][0]),np.min(graph_points[:][1]),np.max(graph_points[:][1]))
+            print("points to graph points 2: {}".format(round(time.time() - t,2)))
+            t = time.time()
             for k,graph_point in enumerate(graph_points):
                 graph_points_information[k],mask[k]  = self.analyze_point(graph_point, reduced_objects)
-            print(len(graph_points))
-            print(sum(mask))
-            print(time.time() - t)
+            print("analyze points: {}".format(round(time.time() - t,2)))
+            t = time.time()
+            graph_points = graph_points_arr[mask]
+            graph, v_position = gt.geometric_graph(graph_points[:,:2], 1.5)
+
+            graph_to_array_index_map = {}          # Keys are graph indices and values are graph_point array indices.
+            for r in range(len(graph_points)):
+                graph_to_array_index_map[r] = int(graph_points[r,2])
+
+            array_to_graph_index_map = {}         
+            for q,r in enumerate(graph_points[:,2]):
+                array_to_graph_index_map[int(r)] = q
+            
+            eprop_cost = graph.new_edge_property("double")
+
+            edges = graph.get_edges()
+            
+            for e in edges:
+                cost = self.get_cost(graph_points_information[graph_to_array_index_map[e[0]]], \
+                                    graph_points_information[graph_to_array_index_map[e[1]]]) # the indices of the two points of the edge
+                eprop_cost[graph.edge(e[0],e[1])] = cost
+            
+            graph.edge_properties["cost"] = eprop_cost
+            #gt.graph_draw(graph, pos=v_position, vertex_text=graph.vertex_index, output="{}.pdf".format(str(i)))
+            
+            weights = graph.ep["cost"]
+
+            start_index_graph = array_to_graph_index_map[start_index]
+            goal_index_graph = array_to_graph_index_map[goal_index]
+            print("prepare graph: {}".format(round(time.time() - t,2)))
+            t = time.time()
+            shortest_path_vertices,_ = gt.shortest_path(graph, \
+                                            graph.vertex(start_index_graph), \
+                                            graph.vertex(goal_index_graph), \
+                                            weights)
+            if not shortest_path_vertices:
+                print("Did not find")
+            print("find shortest path: {}".format(round(time.time() - t,2)))
+            print("------------------")
+            color = graph.new_vertex_property("vector<double>")
+            for v in graph.vertices():
+                if v in shortest_path_vertices:
+                    color[v] = (1,0,0,1)
+                else:
+                    color[v] = (0,0,1,1)
+
+            gt.graph_draw(graph, pos=v_position, vertex_fill_color=color, vertex_text=graph.vertex_index, output="{}_solved.pdf".format(str(i)))
+            
+            last_point = next_point
+            """
+            name = graph.new_vertex_property("string")
+            for v in graph.vertices():
+                name[v] = str(graph.vertex_index[v])
+
+            t = graph.new_vertex_property("int")
+
+            dist,pred = dijkstra_search(graph, weights, graph.vertex(start_index_graph), Visitor(t,name))
+            pred_arr = pred.a
+            
+            shortest_path = [goal_index_graph]
+            finished = False
+            last_node = goal_index_graph
+            while not finished:
+                last_node = pred_arr[last_node]
+                shortest_path.append(last_node)
+                if last_node  == start_index_graph:
+                    finished = True """
+
+
+            """ if np.sum(~np.array(mask)):
+                graph_points = graph_points_arr
+                graph_points = graph_points[mask]
+                fig,ax = plt.subplots(figsize=(3, 3), dpi=200)
+                ax.scatter(graph_points[:,0], graph_points[:,1])
+                for way in reduced_objects['barrier_areas']:
+                    if way.is_area:
+                        x,y = way.line.exterior.xy
+                    else:
+                        x,y = way.line.xy
+                    ax.plot(x, y, c='red', linewidth=2)
+                ax.axis('equal')
+                plt.show() """
 
         """ for i,point in enumerate(self.points):
             if i < len(self.points)-1:
@@ -490,7 +639,16 @@ class PathAnalysis:
             self.points_information[i] = point_information
             self.points_information[i].x = point.x
             self.points_information[i].y = point.y """
-        
+
+    def get_cost(self, p1, p2):
+        return ((p1.x-p2.x)**2 + (p1.y-p2.y)**2)**(1/2)
+
+    def sets_to_lists(self):
+        self.roads_list = list(self.roads)
+        self.footways_list = list(self.footways)
+        self.barrier_areas_list = list(self.barrier_areas)
+        self.terrain_areas_list = list(self.terrain_areas)
+        self.barriers_list = list(self.barriers)
 
     def run(self):
         self.parse_ways()
@@ -498,6 +656,7 @@ class PathAnalysis:
         if self.osm_nodes_data:
             self.parse_nodes()
         self.separate_ways()
+        self.sets_to_lists()
         self.analyze_all_points()
 
     def write_to_file(self,fn):
