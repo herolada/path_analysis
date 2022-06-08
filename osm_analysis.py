@@ -10,7 +10,7 @@ from shapely.ops import linemerge, unary_union, polygonize
 import matplotlib.pyplot as plt
 import sys
 from itertools import compress
-from geodesy import utm
+import utm
 import requests
 from xml.etree import ElementTree
 import numpy as np
@@ -76,7 +76,7 @@ class Way():
         return True
     
     def is_barrier(self, yes_tags, not_tags):
-        if any(key in yes_tags and (self.tags[key] in yes_tags[key] or ('*' in yes_tags[key] and not self.tags[key] in not_tags)) for key in self.tags):
+        if any(key in yes_tags and (self.tags[key] in yes_tags[key] or ('*' in yes_tags[key] and not self.tags[key] in not_tags.get(key,[]))) for key in self.tags):
             return True
     
     """ def is_barrier(self):
@@ -137,6 +137,7 @@ class Visitor(gt.DijkstraVisitor):
         print("edge (%s, %s) has been relaxed..." % \
             (self.name[e.source()], self.name[e.target()]))
 
+RESERVE = 50 # meters
 
 class PathAnalysis:
     def __init__(self, in_file, waypoints_density):
@@ -144,15 +145,18 @@ class PathAnalysis:
         self.waypoints = np.genfromtxt(in_file, delimiter=',')
         self.waypoints_wgs = np.genfromtxt(in_file, delimiter=',')
         self.waypoints_density = waypoints_density
-        self.max_lat = np.max(self.waypoints[:,0])
-        self.min_lat = np.min(self.waypoints[:,0])
-        self.max_long = np.max(self.waypoints[:,1])
-        self.min_long = np.min(self.waypoints[:,1])
-        self.waypoints_to_utm()
-        self.max_x = np.max(self.waypoints[:,0])
-        self.min_x = np.min(self.waypoints[:,0])
-        self.max_y = np.max(self.waypoints[:,1])
-        self.min_y = np.min(self.waypoints[:,1])
+
+        self.waypoints, self.zone_number, self.zone_letter = self.waypoints_to_utm()
+        self.max_x = np.max(self.waypoints[:,0]) + RESERVE
+        self.min_x = np.min(self.waypoints[:,0]) - RESERVE
+        self.max_y = np.max(self.waypoints[:,1]) + RESERVE
+        self.min_y = np.min(self.waypoints[:,1]) - RESERVE
+
+        self.max_lat = utm.to_latlon(self.max_x, self.max_y, self.zone_number, self.zone_letter)[0]
+        self.max_long = utm.to_latlon(self.max_x, self.max_y, self.zone_number, self.zone_letter)[1]
+        self.min_lat = utm.to_latlon(self.min_x, self.min_y, self.zone_number, self.zone_letter)[0]
+        self.min_long = utm.to_latlon(self.min_x, self.min_y, self.zone_number, self.zone_letter)[1]
+
         self.points = list(map(geometry.Point, zip(self.waypoints[:,0], self.waypoints[:,1])))
         self.points_information = []
         self.obstacles = []
@@ -190,10 +194,12 @@ class PathAnalysis:
         return dic
     
     def waypoints_to_utm(self):
-        for i,waypoint in enumerate(self.waypoints):
-            utm_coords = utm.fromLatLong(waypoint[0],waypoint[1])
-            waypoint = np.array([utm_coords.easting, utm_coords.northing])
-            self.waypoints[i] = waypoint
+
+        utm_arr = utm.from_latlon(self.waypoints[:,0],self.waypoints[:,1])
+        utm_coords = np.concatenate((utm_arr[0].reshape(-1,1), utm_arr[1].reshape(-1,1)),axis=1)
+        zone_number = utm_arr[2]
+        zone_letter = utm_arr[3]
+        return utm_coords,zone_number,zone_letter
 
 
     def get_way_query(self):
@@ -230,9 +236,9 @@ class PathAnalysis:
             is_area = False
 
             for node in way.nodes:
-                utm_coords = utm.fromLatLong(float(node.lat),float(node.lon))
+                utm_coords = utm.from_latlon(float(node.lat),float(node.lon))
                 self.way_node_ids.add(node.id)
-                coords.append([utm_coords.easting, utm_coords.northing])
+                coords.append([utm_coords[0], utm_coords[1]])
             
             if coords[0] == coords[-1]:
                 is_area = True
@@ -330,12 +336,12 @@ class PathAnalysis:
 
         for node in self.osm_nodes_data.nodes:
             if not node.id in self.way_node_ids:
-                if any(key in self.OBSTACLE_TAGS and (node.tags[key] in self.OBSTACLE_TAGS[key] or ('*' in self.OBSTACLE_TAGS[key] and not node.tags[key] in self.NOT_OBSTACLE_TAGS)) for key in node.tags):
+                if any(key in self.OBSTACLE_TAGS and (node.tags[key] in self.OBSTACLE_TAGS[key] or ('*' in self.OBSTACLE_TAGS[key] and not node.tags[key]  in self.NOT_OBSTACLE_TAGS.get(key,[]))) for key in node.tags):
                     obstacle = Obstacle()
                     obstacle.id = node.id
                     obstacle.tags = node.tags
-                    coords = utm.fromLatLong(float(node.lat),float(node.lon))
-                    obstacle.point = geometry.Point([coords.easting, coords.northing])
+                    coords = utm.from_latlon(float(node.lat),float(node.lon))
+                    obstacle.point = geometry.Point([coords[0], coords[1]])
                     obstacles.append(obstacle)
 
                     obstacle = self.point_to_area(obstacle)
@@ -443,24 +449,34 @@ class PathAnalysis:
     def get_contain_mask(self, points, areas):
 
         #multi_polygon = geometry.MultiPolygon([(area.line.exterior.coords,[anti_area.line.exterior.coords for anti_area in anti_areas]) for area in areas])
-
-        t = time.time()
         multi_polygon = geometry.MultiPolygon([area.line for area in areas])
-        print("multi pol old {}".format(round(time.time() - t, 4)))
-
         multi_polygon = multi_polygon.buffer(0)
         multi_polygon = prep(multi_polygon)
         contains = lambda p: multi_polygon.contains(p)
         mask = np.array(list(map(contains, points)))
         return mask
     
-    def mask_points(self, points, areas):
+    def mask_points(self, points, other_array, areas):
         multi_polygon = geometry.MultiPolygon([area.line for area in areas])
         multi_polygon = multi_polygon.buffer(0)
         multi_polygon = prep(multi_polygon)
-        does_not_contain = lambda p: not multi_polygon.contains(p)
-        ret = list(filter(does_not_contain, points))
-        return ret
+        does_not_contain = lambda p: not multi_polygon.contains(p[0])
+
+        arr = zip(points,other_array)
+        ret = filter(does_not_contain, arr)
+        #a = list(ret)
+        #ret = list(ret)
+        ret = list(zip(*ret))
+        
+        return ret[0],ret[1]
+
+        #points = np.array(points)
+        #points = points.reshape((len(points),1))
+        #other_array = other_array.reshape((len(other_array),1))
+        #arr = np.concatenate((points,other_array),axis=1)
+        #ret = np.array(filter(does_not_contain, arr))
+
+        #return ret[:,0],ret[:,1:]
 
     
     def analyze_point(self, point, objects):
@@ -624,9 +640,12 @@ class PathAnalysis:
                     goal_index = np.where(current_validity==True)[0][1] + start_index       # point after obstacle
                     
             else:
-                goal_index = np.where(points_validity[start_index+1:]==True)
+                try:
+                    goal_index = np.where(points_validity[start_index+1:]==True)[0][0]
+                except:
+                    break
                 if goal_index:      # point after large obstacle  
-                    goal_index = goal_index[0][0] + start_index +1
+                    goal_index = goal_index + start_index +1
                 else:               # large obstacle until the end (no more goal points)        
                     break
             
@@ -650,16 +669,28 @@ class PathAnalysis:
         """ Using graph search prepare the path for the robot from the given waypoints. """
         """ Rules:
             1. Start and goal are always on the original line. """
-        THRESHOLD = 1   # In meters. How wide is the trajectory we want to follow
-                        # (any point farther than threshold from line trajectory will be penalized).
+        INIT_WIDTH = 1   # In meters. How wide is the trajectory we want to follow
+
+                        # (any point farther than INIT_WIDTH from line trajectory will be penalized).
         DENSITY = 1     # In meters. How dense is the graph (distance between neighboring nodes).
         GOAL_BASE_DIST = 30
-        RESERVE = 0
-        INCREASE = 10
-        MAX_RANGE = 200
+        INCREASE = 50   # In meters
+        MAX_RANGE = 300
         MAX_EFFECTIVE_RANGE = 50000
+        MAX_DIST_LOSS = 10
+        MAX_COST_PER_METER = 10
+        ROAD_LOSS = 1000
+        NO_FOOTWAY_LOSS = 100
+        MAX_DETOUR_COUNTER = 3
+
+        if INIT_WIDTH < 1:
+            INIT_WIDTH = 1
+            print("Parameter INIT_WIDTH set to 1 (minimum).")
 
         graph_counter = 0
+        detour_counter = 0
+        saved_shortest_path = None
+        saved_missed_goal_points = []
 
         if DENSITY < self.waypoints_density:
             points_line = points_arr_to_point_line(self.points,density=DENSITY)
@@ -692,29 +723,28 @@ class PathAnalysis:
         path = []
 
         while goal_points:              # Main cycle.
-            t = time.time()
+            start_t = time.time()
             goal_point = goal_points.pop(0)
 
             objects_in_area = None
-            solved = False
             increase_graph = 0
             density = DENSITY
-            reserve = RESERVE*density
             start_goal_dist = np.sqrt((goal_point.x-start_point.x)**2 + (goal_point.y-start_point.y)**2)
             keep_previous_start = False
 
-            while not solved:
+            while True:
                 graph_counter += 1
-                graph_points, points_line, start_index, goal_index = points_to_graph_points(start_point, goal_point, density=density, width=THRESHOLD, increase=increase_graph)
+                graph_range =  INIT_WIDTH + 2*increase_graph
+                graph_points, points_line, dist_from_line = points_to_graph_points(start_point, goal_point, density=density, width=graph_range)
                 #graph_points_arr = np.array([[p.x,p.y,i] for i,p in enumerate(graph_points.geoms)])
                 
-                #print("points to graph points: {}".format(round(time.time() - t,3)))
-                #t = time.time()
+                t = time.time()
                 objects_in_area = self.get_reduced_objects(graph_points.bounds[0],\
                                                             graph_points.bounds[1],\
                                                             graph_points.bounds[2],\
                                                             graph_points.bounds[3],\
-                                                            reserve=reserve)
+                                                            reserve=graph_range)
+                print("points to graph points: {}".format(round(time.time() - t,4)))
 
                 """ if not objects_in_area or increase_graph*density >= reserve:
 
@@ -725,17 +755,25 @@ class PathAnalysis:
                                                             np.max(graph_points_arr[:,0]),\
                                                             np.min(graph_points_arr[:,1]),\
                                                             np.max(graph_points_arr[:,1]),\
-                                                            reserve=reserve)
+                                                            reserve=reserve) """
 
-                    print("Had to fetch new reduced objects.") """
 
                 t = time.time()
                 #graph_points_information = [None] * len(graph_points)
                 #mask = [None] * len(graph_points)
 
-                graph_points = self.mask_points(graph_points.geoms, objects_in_area['barrier_areas'])
+                graph_points,dist_from_line = self.mask_points(graph_points.geoms, dist_from_line, objects_in_area['barrier_areas'])
+                dist_from_line = np.array(dist_from_line)
+                t = time.time()
                 road_points_mask = self.get_contain_mask(graph_points, objects_in_area['road_areas'])
+                print("road mask {}".format(round(time.time()-t,4)))
+                t = time.time()
                 footway_points_mask = self.get_contain_mask(graph_points, objects_in_area['footway_areas'])
+                print("foot mask {}".format(round(time.time()-t,4)))
+                t = time.time()
+                out_of_max_dist_mask = dist_from_line >= MAX_DIST_LOSS
+                out_of_max_dist_mask = np.squeeze(out_of_max_dist_mask)
+                print("out of mask {}".format(round(time.time()-t,4)))
 
                 graph_points = np.array(list(geometry.LineString(graph_points).xy)).T
                 #graph_points = np.array([[p.x,p.y] for p in graph_points]) # twice as slow
@@ -766,9 +804,13 @@ class PathAnalysis:
                 edge_points_1 = graph_points[edges[:,0]]
                 edge_points_2 = graph_points[edges[:,1]]
                 road_points = (road_points_mask[edges[:,0]] + road_points_mask[edges[:,1]]) * (~footway_points_mask[edges[:,0]] + ~footway_points_mask[edges[:,1]])
+                
+                dist_cost = np.divide(dist_from_line[edges[:,0]] + dist_from_line[edges[:,1]], 2)
+                dist_cost = np.minimum(dist_cost, MAX_DIST_LOSS)
+                no_footways = (out_of_max_dist_mask[edges[:,0]] * out_of_max_dist_mask[edges[:,1]]) * (~footway_points_mask[edges[:,0]] + ~footway_points_mask[edges[:,1]])
                 #footway_points = footway_points_mask[edges[:,0]] + footway_points_mask[edges[:,0]]
-                costs = self.get_costs(edge_points_1, edge_points_2, road_points)
-                costs = np.reshape(costs,(len(costs),1))
+                costs = self.get_costs(edge_points_1, edge_points_2, road_points, dist_cost, ROAD_LOSS, no_footways, NO_FOOTWAY_LOSS)
+                #costs = np.reshape(costs,(len(costs),1))
                 edges = np.concatenate((edges,costs),axis=1)
 
                 graph.add_edge_list(edges, eprops=[eprop_cost])
@@ -784,25 +826,81 @@ class PathAnalysis:
                     eprop_cost[graph.edge(e[0],e[1])] = cost """
                 
                 #graph.ep["cost"] = eprop_cost
-
-                #gt.graph_draw(graph, output_size=(1000,1000), pos=v_position, vertex_size = 4, output="images/{}.pdf".format(graph_counter))
                 
                 weights = eprop_cost
 
                 #start_index_graph = array_to_graph_index_map[start_index]
                 #goal_index_graph = array_to_graph_index_map[goal_index]
                 
-                shortest_path_vertices,_ = gt.shortest_path(graph, \
+                shortest_path_vertices,shortest_path_edges = gt.shortest_path(graph, \
                                                 graph.vertex(start_index_graph), \
                                                 graph.vertex(goal_index_graph), \
                                                 weights=weights)
+
+                shortest_path_cost = self.get_path_cost(shortest_path_edges,weights)
+                #shortest_path_dist = get_path_dist(self,p1,p2)
                 
                 color = graph.new_vertex_property("vector<double>")
                 
                 color[graph.vertex(start_index_graph)] = (0,1,0,1)
                 color[graph.vertex(goal_index_graph)] = (0,1,0,1)
+
+                gt.graph_draw(graph, output_size=(1000,1000), pos=v_position, vertex_fill_color=color, edge_font_size = 8, edge_text = eprop_cost, vertex_size = 4, output="images/{}.pdf".format(graph_counter))
+            
+                print("range {}, increase {}, density {}, points {}".format((2*increase_graph+INIT_WIDTH)*density,increase_graph, density, len(graph.get_vertices())))
                 
                 if shortest_path_vertices:
+                    if (shortest_path_cost < MAX_COST_PER_METER * start_point.distance(goal_point)) or graph_range >= MAX_RANGE:
+                        path += [graph_points[graph.vertex_index[v]] for v in shortest_path_vertices]
+                        print("solved in {}".format(time.time()-start_t))
+                        
+                        """ for v in graph.vertices():
+                            if v in shortest_path_vertices:
+                                color[v] = (1,0,0,1)
+                            else:
+                                color[v] = (0,0,1,1)
+
+                        gt.graph_draw(graph, output_size=(1000,1000), pos=v_position, vertex_size = 4, vertex_fill_color=color, output="images/{}_solved.pdf".format(graph_counter))
+                        """
+
+                        break
+                    else:
+                        increase_graph += INCREASE
+                    """ else:
+                        if graph_range < MAX_RANGE:
+                            increase_graph += INCREASE
+                        else:
+                            if detour_counter == 0:
+                                print("Saving path and searching with new goal")
+                                saved_shortest_path = [graph_points[graph.vertex_index[v]] for v in shortest_path_vertices]
+                            else:
+                                saved_missed_goal_points.append(goal_point)
+                            print("Searching with new goal")
+                            keep_previous_start = True
+
+                            if detour_counter > MAX_DETOUR_COUNTER:
+                                print("Used saved path")
+                                path += saved_shortest_path
+                                saved_shortest_path = None
+
+                                goal_points = saved_missed_goal_points + goal_points
+                                saved_missed_goal_points = []
+
+                                keep_previous_start = False
+                                detour_counter = 0
+                            else:
+                                detour_counter += 1
+
+                            break """
+                else:
+                    if graph_range >= MAX_RANGE:
+                        print("no path in range {} m".format(graph_range))
+                        break
+                    else:
+                        increase_graph += INCREASE
+
+                
+                """ if shortest_path_vertices and (shortest_path_cost < len(shortest_path_vertices) or increase_graph > 0):
                     path += [graph_points[graph.vertex_index[v]] for v in shortest_path_vertices]
                     solved = True
                     print("solved in {}".format(time.time()-t))
@@ -810,30 +908,29 @@ class PathAnalysis:
                         if v in shortest_path_vertices:
                             color[v] = (1,0,0,1)
                         else:
-                            color[v] = (0,0,1,1)
+                            color[v] = (0,0,1,1) """
 
                     #gt.graph_draw(graph, output_size=(1000,1000), pos=v_position, vertex_size = 4, vertex_fill_color=color, output="images/{}_solved.pdf".format(graph_counter))
-                else:
-                    increase_graph += INCREASE
                 
+
+
                 #if increase_graph > 30*density:
                     #density = 2*density
                     #print("increase density to {}".format(density))
-                if (2*increase_graph+THRESHOLD)*density/start_goal_dist > MAX_EFFECTIVE_RANGE:
-                    print("COULD NOT FIND PATH IN {} M EFFECTIVE RANGE.".format((2*increase_graph+THRESHOLD)*density))
+                #if graph_range/start_goal_dist > MAX_EFFECTIVE_RANGE:
+                    #print("COULD NOT FIND PATH IN {} M EFFECTIVE RANGE.".format((2*increase_graph+INIT_WIDTH)*density))
                     #gt.graph_draw(graph, output_size=(1000,1000), vertex_fill_color=color, pos=v_position, vertex_size = 4, output="images/{}_effective.pdf".format(graph_counter))
-                    keep_previous_start = True
-                    break
+                    #keep_previous_start = True
+                    #break
                 
-                if (2*increase_graph+THRESHOLD)*density > MAX_RANGE:
+                #if graph_range >= MAX_RANGE:
                     #gt.graph_draw(graph, output_size=(1000,1000), vertex_fill_color=color, pos=v_position, vertex_size = 4, output="images/{}_gaveup.pdf".format(graph_counter))
 
                     #gt.graph_draw(graph, output_size=(2000,2000), pos=v_position, vertex_size = 4, vertex_font_size = 8, vertex_fill_color=color, vertex_text=graph.vertex_index, output="images/{}_solved.pdf".format(graph_counter))
-                    print("COULD NOT FIND PATH IN {} M RANGE.".format(MAX_RANGE))
-                    break
-                
-                print("range {}, increase {}, density {}, points {}".format((2*increase_graph+THRESHOLD)*density,increase_graph, density, len(graph.get_vertices())))
-            
+                    #print("COULD NOT FIND PATH IN {} M RANGE.".format(MAX_RANGE))
+                    #break
+                #increase_graph += INCREASE
+
             if not keep_previous_start:
                 keep_previous_start = False
                 start_point = goal_point
@@ -882,9 +979,19 @@ class PathAnalysis:
             self.points_information[i].y = point.y """
 
         self.path = np.array(path)
+
+    def get_path_cost(self,edges,costs):
+        cost = 0
+        for edge in edges:
+            cost += costs[edge]
+        return cost
     
-    def get_costs(self, p1, p2, roads):
-        return np.sqrt(np.sum(np.square(p1-p2),axis=1)) + 10*roads
+    def get_path_dist(self,p1,p2):
+        return np.sqrt(np.sum(np.square(p1-p2),axis=1))
+    
+    def get_costs(self, p1, p2, roads, dist_cost, road_loss, no_footways, no_footway_loss):
+        #return dist_cost
+        return np.reshape(np.sqrt(np.sum(np.square(p1-p2),axis=1)) + road_loss*roads + no_footway_loss * no_footways, (len(p1),1)) + dist_cost
 
     #def get_cost(self, p1, p2):
         #return ((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)**(1/2)
